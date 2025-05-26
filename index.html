@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Shooter Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        #game-screen {
+            position: relative;
+            background-image: url('https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?q=80&w=1000');
+            background-size: cover;
+            overflow: hidden;
+        }
+        .bullet {
+            position: absolute;
+            background-color: yellow;
+            border-radius: 50%;
+        }
+        .enemy {
+            position: absolute;
+            background-color: red;
+            border-radius: 50%;
+        }
+        #player {
+            position: absolute;
+            transition: transform 0.1s linear;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex flex-col items-center justify-center min-h-screen p-4">
+    <div class="text-center mb-4">
+        <h1 class="text-4xl font-bold text-blue-400 mb-2">🚀 Space Shooter</h1>
+        <div class="flex gap-8 justify-center">
+            <div class="bg-gray-800 px-4 py-2 rounded-lg">
+                <span class="font-bold">Score:</span> <span id="score">0</span>
+            </div>
+            <div class="bg-gray-800 px-4 py-2 rounded-lg">
+                <span class="font-bold">High Score:</span> <span id="high-score">0</span>
+            </div>
+            <div class="bg-gray-800 px-4 py-2 rounded-lg">
+                <span class="font-bold">Health:</span> <span id="health">100</span>%
+            </div>
+        </div>
+    </div>
+
+    <div id="game-screen" class="w-full max-w-3xl h-96 border-2 border-blue-500 relative bg-black mb-4"></div>
+
+    <div class="flex gap-4">
+        <button id="start-btn" class="bg-green-600 hover:bg-green-700 px-6 py-2 rounded-lg font-bold">
+            Start Game
+        </button>
+        <button id="restart-btn" class="bg-red-600 hover:bg-red-700 px-6 py-2 rounded-lg font-bold">
+            Restart
+        </button>
+    </div>
+
+    <div class="mt-6 bg-gray-800 p-4 rounded-lg max-w-3xl">
+        <h2 class="text-xl font-bold mb-2">🎮 How to Play:</h2>
+        <ul class="list-disc pl-5">
+            <li>Use <span class="font-bold">Arrow Keys</span> to move the spaceship</li>
+            <li>Press <span class="font-bold">Spacebar</span> to shoot bullets</li>
+            <li>Destroy enemies to earn points</li>
+            <li>Avoid collisions with enemies (lose health)</li>
+        </ul>
+    </div>
+
+    <script>
+        // Game Elements
+        const gameScreen = document.getElementById('game-screen');
+        const player = document.createElement('div');
+        const scoreDisplay = document.getElementById('score');
+        const highScoreDisplay = document.getElementById('high-score');
+        const healthDisplay = document.getElementById('health');
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+
+        // Game Variables
+        let score = 0;
+        let highScore = localStorage.getItem('highScore') || 0;
+        let health = 100;
+        let gameRunning = false;
+        let enemies = [];
+        let bullets = [];
+        let keys = {};
+        let gameLoop;
+        let enemySpawnInterval;
+
+        // Player Setup
+        player.id = 'player';
+        player.className = 'w-12 h-12 bg-blue-500 rounded-lg';
+        player.style.left = '50%';
+        player.style.bottom = '20px';
+        gameScreen.appendChild(player);
+
+        // Event Listeners
+        document.addEventListener('keydown', (e) => keys[e.code] = true);
+        document.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', restartGame);
+
+        // Game Functions
+        function startGame() {
+            if (gameRunning) return;
+            
+            gameRunning = true;
+            score = 0;
+            health = 100;
+            updateDisplays();
+            
+            // Clear existing enemies and bullets
+            enemies.forEach(enemy => enemy.remove());
+            bullets.forEach(bullet => bullet.remove());
+            enemies = [];
+            bullets = [];
+            
+            // Start game loops
+            gameLoop = setInterval(updateGame, 20);
+            enemySpawnInterval = setInterval(spawnEnemy, 1000);
+            
+            startBtn.disabled = true;
+        }
+
+        function restartGame() {
+            clearInterval(gameLoop);
+            clearInterval(enemySpawnInterval);
+            gameRunning = false;
+            startGame();
+        }
+
+        function updateGame() {
+            movePlayer();
+            moveBullets();
+            moveEnemies();
+            checkCollisions();
+        }
+
+        function movePlayer() {
+            const speed = 5;
+            const rect = gameScreen.getBoundingClientRect();
+            let x = parseInt(player.style.left) || 0;
+            let y = parseInt(player.style.bottom) || 0;
+
+            if (keys['ArrowLeft'] && x > 0) x -= speed;
+            if (keys['ArrowRight'] && x < rect.width - 50) x += speed;
+            if (keys['ArrowUp'] && y < rect.height - 50) y += speed;
+            if (keys['ArrowDown'] && y > 0) y -= speed;
+            if (keys['Space'] && gameRunning) fireBullet();
+
+            player.style.left = `${x}px`;
+            player.style.bottom = `${y}px`;
+        }
+
+        function fireBullet() {
+            if (bullets.length > 5) return; // Limit bullets
+            
+            const bullet = document.createElement('div');
+            bullet.className = 'bullet w-2 h-4';
+            const playerRect = player.getBoundingClientRect();
+            bullet.style.left = `${playerRect.left + 22 - gameScreen.getBoundingClientRect().left}px`;
+            bullet.style.bottom = `${playerRect.bottom - gameScreen.getBoundingClientRect().top + 10}px`;
+            gameScreen.appendChild(bullet);
+            bullets.push(bullet);
+        }
+
+        function moveBullets() {
+            bullets.forEach((bullet, index) => {
+                const currentBottom = parseInt(bullet.style.bottom) || 0;
+                bullet.style.bottom = `${currentBottom + 10}px`;
+                
+                // Remove bullet if it goes off screen
+                if (currentBottom > gameScreen.offsetHeight) {
+                    bullet.remove();
+                    bullets.splice(index, 1);
+                }
+            });
+        }
+
+        function spawnEnemy() {
+            if (!gameRunning) return;
+            
+            const enemy = document.createElement('div');
+            enemy.className = 'enemy w-8 h-8';
+            enemy.style.left = `${Math.random() * (gameScreen.offsetWidth - 30)}px`;
+            enemy.style.top = '0px';
+            gameScreen.appendChild(enemy);
+            enemies.push(enemy);
+        }
+
+        function moveEnemies() {
+            enemies.forEach((enemy, index) => {
+                const currentTop = parseInt(enemy.style.top) || 0;
+                enemy.style.top = `${currentTop + 3}px`;
+                
+                // Remove enemy if it goes off screen
+                if (currentTop > gameScreen.offsetHeight) {
+                    enemy.remove();
+                    enemies.splice(index, 1);
+                }
+            });
+        }
+
+        function checkCollisions() {
+            const playerRect = player.getBoundingClientRect();
+            
+            // Check bullet-enemy collisions
+            bullets.forEach((bullet, bIndex) => {
+                const bulletRect = bullet.getBoundingClientRect();
+                
+                enemies.forEach((enemy, eIndex) => {
+                    const enemyRect = enemy.getBoundingClientRect();
+                    
+                    if (
+                        bulletRect.left < enemyRect.right &&
+                        bulletRect.right > enemyRect.left &&
+                        bulletRect.top < enemyRect.bottom &&
+                        bulletRect.bottom > enemyRect.top
+                    ) {
+                        // Bullet hits enemy
+                        enemy.remove();
+                        bullet.remove();
+                        enemies.splice(eIndex, 1);
+                        bullets.splice(bIndex, 1);
+                        score += 10;
+                        updateDisplays();
+                    }
+                });
+            });
+            
+            // Check player-enemy collisions
+            enemies.forEach((enemy, index) => {
+                const enemyRect = enemy.getBoundingClientRect();
+                
+                if (
+                    playerRect.left < enemyRect.right &&
+                    playerRect.right > enemyRect.left &&
+                    playerRect.top < enemyRect.bottom &&
+                    playerRect.bottom > enemyRect.top
+                ) {
+                    // Player hits enemy
+                    enemy.remove();
+                    enemies.splice(index, 1);
+                    health -= 10;
+                    updateDisplays();
+                    
+                    if (health <= 0) {
+                        gameOver();
+                    }
+                }
+            });
+        }
+
+        function updateDisplays() {
+            scoreDisplay.textContent = score;
+            healthDisplay.textContent = health;
+            
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('highScore', highScore);
+                highScoreDisplay.textContent = highScore;
+            }
+        }
+
+        function gameOver() {
+            clearInterval(gameLoop);
+            clearInterval(enemySpawnInterval);
+            gameRunning = false;
+            alert(`Game Over! Your score: ${score}`);
+            startBtn.disabled = false;
+        }
+    </script>
+</body>
+</html>
